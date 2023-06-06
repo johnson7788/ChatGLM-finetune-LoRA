@@ -22,10 +22,10 @@ model_id = "finetune_test"
 
 mixed_precision = 'bf16'
 lora_config = {
-    'r': 32,
-    'lora_alpha':32,
-    'lora_dropout':0.05,
-    'enable_lora':[True, False, True],
+    'r': 32,   #矩阵的秩
+    'lora_alpha':32,   # lora的超参数alpha
+    'lora_dropout':0.05,  # lora的dropout
+    'enable_lora':[True, False, True],  # 对应着q,k,v，在哪些地方使用lora
 }
 
 LR = 1e-4
@@ -36,12 +36,12 @@ accumulate_step = 8
 warm_up_ratio = 0.1
 
 
-
+# 使用accelerate的deepseed插件
 deepspeed_plugin = DeepSpeedPlugin(gradient_accumulation_steps=accumulate_step)
 accelerator = Accelerator(mixed_precision=mixed_precision, deepspeed_plugin=deepspeed_plugin, log_with="tensorboard", project_dir='runs/')
-device = accelerator.device
+device = accelerator.device  # accelerator自动选择设备
 
-
+# 只在主进程上执行，加载模型和tokenizer
 with accelerator.main_process_first():
     retry_cnt = 10
     cnt = 0
@@ -58,7 +58,7 @@ with accelerator.main_process_first():
 
     model = get_lora_model(model, lora_config)
 
-
+# 等待每个workers都准备好
 accelerator.wait_for_everyone()
 
 model.use_cache = False
@@ -69,19 +69,21 @@ import dataset.Alpaca as Alpaca_Data
 dataset.GLM.device = device
 
 
-accelerator.print('Start to process data')
+accelerator.print('开始准备数据集')
 
 
 
 with accelerator.main_process_first():
     pairs = Alpaca_Data.load('./data/alpaca_data.json')
     pairs_encoded = dataset.GLM.encode_pairs(pairs, tokenizer)
+    accelerator.print('未按最大长度过滤前的数据集大小：', len(pairs_encoded))
     pairs_encoded = list(filter(lambda pair: len(pair['prompt'])+len(pair['completion']) <= MAX_LENGTH, pairs_encoded))
+    accelerator.print('按最大长度过滤后的数据集大小：', len(pairs_encoded))
 train_dataset = dataset.GLM.SimpleDataset(pairs_encoded)
 train_dataloader = DataLoader(dataset=train_dataset, collate_fn = dataset.GLM.collate_fn, shuffle=True, batch_size=BATCH)
 
 
-
+# 等待每个workers都准备好
 accelerator.wait_for_everyone()
 
 
@@ -96,7 +98,7 @@ model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(model, op
 
 
 
-
+# 日志名称记录
 accelerator.init_trackers(model_id, {})
 
 total_effective_step = 0

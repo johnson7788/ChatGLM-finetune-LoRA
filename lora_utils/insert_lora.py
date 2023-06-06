@@ -75,9 +75,9 @@ class QKV_layer(torch.nn.Module):
 
 
 def get_lora_model(model, lora_config, update = False):
-    
+    # q,k,v中的哪些位置使用lora； update表示是否更新lora的参数
     target_modules = list(compress(['q', 'k', 'v'], lora_config['enable_lora']))
-
+    # 加载peft的lora配置
     config = LoraConfig(
               peft_type="LORA", 
               task_type="CAUSAL_LM", 
@@ -86,8 +86,8 @@ def get_lora_model(model, lora_config, update = False):
               target_modules=target_modules,
               lora_dropout=lora_config['lora_dropout'])
 
-    pbar = tqdm.tqdm(total=28)
-
+    pbar = tqdm.tqdm(total=28,desc="更新成lora模型")
+    # 遍历模型的所有层的名称和模块
     for key, module in model.named_modules():
         if key.endswith('attention'):
             layer = int(key.split('.')[2])
@@ -105,7 +105,7 @@ def get_lora_model(model, lora_config, update = False):
             else:
                 qkv_layer = QKV_layer(module.query_key_value.in_features, module.query_key_value.out_features)
                 qkv_layer.update(module.query_key_value)
-                module.query_key_value = qkv_layer
+                module.query_key_value = qkv_layer  # 更新模块
                 module.query_key_value = peft.tuners.lora.LoraModel(config, module.query_key_value)
             
             pbar.update(1)
