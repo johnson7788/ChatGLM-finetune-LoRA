@@ -109,7 +109,7 @@ for epoch in range(NUM_EPOCHS):
     effective_step = 0
     
     for step, batch in enumerate(t:=tqdm.tqdm(train_dataloader)):
-
+        # batch批次数据来自collate_fn函数返回，返回input_ids,attention_mask,labels,position_ids
         outputs = model(**batch)
 
         loss_d = outputs.loss.detach().cpu().float().item()

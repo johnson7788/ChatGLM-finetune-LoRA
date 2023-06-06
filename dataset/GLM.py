@@ -27,16 +27,16 @@ def collate_fn(batch):
     input_ids = []
     labels = []
     position_ids = []
-
+    # 一个batch中最长的长度
     _max_length = max([len(obj['prompt'])+len(obj['completion']) for obj in batch])
     _max_length = (_max_length // pad_to + (_max_length % pad_to > 0) ) * pad_to
-
+    # 根据最大长度生成attention mask
     attention_mask = torch.ones((len(batch), _max_length, _max_length), device=device)
-    attention_mask.tril_()
+    attention_mask.tril_() # 下三角矩阵
 
     for i, obj in enumerate(batch):
-        context_length = obj['prompt'].index(130004)
-        attention_mask[i, :, :context_length] = 1
+        context_length = obj['prompt'].index(130004)  #获取EOS的位置
+        attention_mask[i, :, :context_length] = 1  #注意力mask，前context_length个token是可见的
 
         to_pad = _max_length - len(obj['prompt']) - len(obj['completion'])
 
@@ -45,11 +45,11 @@ def collate_fn(batch):
         position_ids.append(torch.stack([torch.arange(0, _max_length, device=device), 
                                          torch.concat([torch.zeros(context_length - 1, device=device), 
                                                        torch.arange(0, _max_length - context_length + 1, device=device)])]).long())
-
+        # 构造labels,只有不是-100的位置才需要预测
         labels.append(torch.tensor([-100] * len(obj['prompt']) + 
                                    obj['completion'] +
                                    [-100] * to_pad, device=device).long())
-
+    # 增加1个维度，变成batch_size * 1 * max_length * max_length
     attention_mask.unsqueeze_(1)
     attention_mask = (attention_mask < 0.5).bool()
     return {'input_ids': torch.tensor(input_ids).long(), 
