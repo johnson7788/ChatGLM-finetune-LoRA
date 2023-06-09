@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
-
-
 import os
 
 #os.environ["CUDA_VISIBLE_DEVICES"]="0"
@@ -15,62 +12,48 @@ from transformers import AutoTokenizer, AutoModel
 
 device = 'cuda'
 checkpoint = "THUDM/chatglm-6b"
+lora_model = "saved/finetune_test/finetune_test_epoch_0.pt"
+# lora_model = "saved/chatglm-6b_demo.pt"
 
 tokenizer = AutoTokenizer.from_pretrained(checkpoint, trust_remote_code=True, revision = 'main')
 model = AutoModel.from_pretrained(checkpoint, trust_remote_code=True, revision = 'main')
-
-
-# In[2]:
 
 
 import loralib as lora
 from lora_utils.insert_lora import get_lora_model
 
 
-# In[3]:
-
-
 lora_config = {
-        'r': 8,
-        'lora_alpha':16,
-        'lora_dropout':0.1,
+        'r': 32,
+        'lora_alpha':32,
+        'lora_dropout':0.5,
         'enable_lora':[True, False, True],
     }
 
-
-# In[4]:
-
-
-model = get_lora_model(model, lora_config)
-
-
-# In[5]:
+# lora_config = {
+#         'r': 8,
+#         'lora_alpha':16,
+#         'lora_dropout':0.1,
+#         'enable_lora':[True, False, True],
+#     }
 
 
-_ = model.load_state_dict(torch.load('saved/chatglm-6b_demo.pt'), strict=False)
-
-
-# In[6]:
-
+# model = get_lora_model(model, lora_config)
+# _ = model.load_state_dict(torch.load(lora_model), strict=False)
 
 _ = model.half().cuda().eval()
 
+# role = '峰哥'
 
-# In[7]:
+# question = f'{role}夏季去海边度假有哪些必备的护肤品？'
+# question = f'夏季去海边度假有哪些必备的护肤品？'
+    question = f'水杨酸到底是什么，有什么用？该怎么用？'
 
+# emotional = '真诚的'
+# length = '详细的'
 
-
-role = '峰哥'
-
-question = f'{role}能锐评一下大语言模型吗？'
-
-emotional = '真诚的'
-length = '详细的'
-
-text=f'{question}\n{role}{emotional}{length}答：'
-
-
-# In[9]:
+# text=f'{question}\n{role}{emotional}{length}答：'
+text = f'{question}'
 
 
 inputs = tokenizer(text, padding=True, truncation=True, max_length=1024, return_tensors="pt")
@@ -84,19 +67,11 @@ outputs = model.generate(
     top_p = 0.75,
     top_k = 10000,
     repetition_penalty=1.5, 
-    num_return_sequences=10,
+    num_return_sequences=1,  #生成几个句子
 )
-
-
-# In[11]:
-
 
 for output in outputs:
     print(tokenizer.decode(output)[len(text):])
-
-
-# In[ ]:
-
 
 
 

@@ -1,28 +1,37 @@
-
 import os
 import time
 import tqdm
 import json
+import argparse
 import torch
 import numpy as np
 import loralib as lora
 from lora_utils.insert_lora import get_lora_model
-
 
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, AutoModel
 from accelerate import Accelerator, DeepSpeedPlugin
 from transformers import get_linear_schedule_with_warmup
 
+def parse_args():
+    """
+    返回arg变量和help
+    :return:
+    """
+    parser = argparse.ArgumentParser(description="加载模型",formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('-id', '--model_id', type=str, default='finetune_test', help='实验的名称和保存模型名称')
+    parser.add_argument('-lr', "--lora_rank", type=int, default=32, help="lora的秩")
+    parser.add_argument('-e', "--epoch", type=int, default=1, help="训练的epoch数量")
+    parser.add_argument('-m', "--max_length", type=int, default=512, help="训练的数据的最大长度512")
+    return parser.parse_args(), parser.print_help
 
-
+args, helpmsg = parse_args()
 checkpoint = "THUDM/chatglm-6b"
-
-model_id = "finetune_test"
-
+model_id = args.model_id
+lora_rank = args.lora_rank
 mixed_precision = 'bf16'
 lora_config = {
-    'r': 32,   #矩阵的秩
+    'r': lora_rank,   #矩阵的秩
     'lora_alpha':32,   # lora的超参数alpha
     'lora_dropout':0.05,  # lora的dropout
     'enable_lora':[True, False, True],  # 对应着q,k,v，在哪些地方使用lora
@@ -30,11 +39,10 @@ lora_config = {
 
 LR = 1e-4
 BATCH = 1
-MAX_LENGTH = 256
-NUM_EPOCHS = 3
+MAX_LENGTH = args.max_length
+NUM_EPOCHS = args.epoch
 accumulate_step = 8
 warm_up_ratio = 0.1
-
 
 # 使用accelerate的deepseed插件
 deepspeed_plugin = DeepSpeedPlugin(gradient_accumulation_steps=accumulate_step)
@@ -65,16 +73,14 @@ model.use_cache = False
 model.gradient_checkpointing = False
 
 
-import dataset.Alpaca as Alpaca_Data
+import dataset.beauty as Load_My_Dataset
 dataset.GLM.device = device
-
 
 accelerator.print('开始准备数据集')
 
-
-
 with accelerator.main_process_first():
-    pairs = Alpaca_Data.load('./data/alpaca_data.json')
+    # pairs = Load_My_Dataset.load('./data/alpaca_data.json')
+    pairs = Load_My_Dataset.load('./data/问答数据集.json')
     pairs_encoded = dataset.GLM.encode_pairs(pairs, tokenizer)
     accelerator.print('未按最大长度过滤前的数据集大小：', len(pairs_encoded))
     pairs_encoded = list(filter(lambda pair: len(pair['prompt'])+len(pair['completion']) <= MAX_LENGTH, pairs_encoded))
@@ -95,7 +101,6 @@ lr_scheduler = get_linear_schedule_with_warmup(
     num_training_steps=(len(train_dataloader) // accumulate_step * NUM_EPOCHS),
 )
 model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(model, optimizer, train_dataloader, lr_scheduler)
-
 
 
 # 日志名称记录
